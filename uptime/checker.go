@@ -19,6 +19,12 @@ type Checker struct {
 
     enableInternalLogs bool
     logger             *zap.Logger
+    loggerExplicit     bool // set when WithLogger/WithZapLogger used
+
+    // logging configuration accumulated by options
+    logConsoleOpt *bool
+    logFilesOpt   []string
+    logDisableOpt bool
 
     jobs    chan Job
     results chan Result
@@ -41,12 +47,72 @@ func New(opts ...Option) *Checker {
         results:    make(chan Result, 1000),
         stopCh:     make(chan struct{}),
         logs:       make(map[string][]Result),
-        logger:     zap.NewNop(), // default to no-op logger to avoid nil panics
+        logger:     nil, // build after applying options
     }
     for _, opt := range opts {
         opt(c)
     }
+    // Build logger after options applied unless explicitly provided
+    if !c.loggerExplicit {
+        c.logger = c.buildLoggerFromConfig()
+    }
+    // Safety fallback
+    if c.logger == nil {
+        c.logger = defaultConsoleLogger()
+    }
     return c
+}
+
+func defaultConsoleLogger() *zap.Logger {
+    l, err := zap.NewProduction(zap.AddCallerSkip(1))
+    if err != nil {
+        return zap.NewNop()
+    }
+    return l
+}
+
+func (c *Checker) buildLoggerFromConfig() *zap.Logger {
+    // If disabled explicitly
+    if c.logDisableOpt {
+        return zap.NewNop()
+    }
+
+    // Determine console default: true unless explicitly set to false
+    console := true
+    if c.logConsoleOpt != nil {
+        console = *c.logConsoleOpt
+    }
+
+    // Build output paths
+    var paths []string
+    seen := map[string]struct{}{}
+    if console {
+        paths = append(paths, "stdout")
+        seen["stdout"] = struct{}{}
+    }
+    for _, f := range c.logFilesOpt {
+        if f == "" {
+            continue
+        }
+        if _, ok := seen[f]; ok {
+            continue
+        }
+        seen[f] = struct{}{}
+        paths = append(paths, f)
+    }
+
+    if len(paths) == 0 {
+        // No outputs selected: default to console
+        return defaultConsoleLogger()
+    }
+
+    cfg := zap.NewProductionConfig()
+    cfg.OutputPaths = paths
+    l, err := cfg.Build()
+    if err != nil {
+        return zap.NewNop()
+    }
+    return l
 }
 
 // ===== Public API =====

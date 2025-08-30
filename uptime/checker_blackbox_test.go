@@ -3,21 +3,20 @@ package uptime_test
 import (
     "encoding/json"
     "os"
+    "path/filepath"
     "testing"
     "time"
 
     "net/http"
     "net/http/httptest"
 
-    "core-v6/uptime"
-    "go.uber.org/zap"
-    "go.uber.org/zap/zaptest/observer"
+    up "github.com/amartya2002/uptime-checker-core/uptime"
 )
 
-// Basic defaults and listing
+// Test that adding a site applies defaults and ListSites works as an external user would expect.
 func TestAddSiteDefaultsAndListSites(t *testing.T) {
-    c := uptime.New()
-    ep := uptime.Endpoint{ID: "s1", Name: "Test", URL: "http://example"}
+    c := up.New()
+    ep := up.Endpoint{ID: "s1", Name: "Test", URL: "http://example"}
     c.AddSite(ep)
 
     sites := c.ListSites()
@@ -36,7 +35,7 @@ func TestAddSiteDefaultsAndListSites(t *testing.T) {
     }
 }
 
-// End-to-end success path produces a result
+// End-to-end success path using a real HTTP server and the public API.
 func TestSchedulerAndWorkerFlow_Success(t *testing.T) {
     ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         w.WriteHeader(http.StatusOK)
@@ -44,16 +43,16 @@ func TestSchedulerAndWorkerFlow_Success(t *testing.T) {
     }))
     defer ts.Close()
 
-    c := uptime.New(uptime.WithWorkers(1), uptime.WithResultBuffer(10))
+    c := up.New(up.WithWorkers(1), up.WithResultBuffer(10))
     c.Start()
     defer c.Stop()
 
-    c.AddSite(uptime.Endpoint{
+    c.AddSite(up.Endpoint{
         ID:             "ok",
         Name:           "ok-site",
         URL:            ts.URL,
         Method:         "GET",
-        Frequency:      15 * time.Millisecond,
+        Frequency:      20 * time.Millisecond,
         ExpectedStatus: 200,
     })
 
@@ -70,38 +69,37 @@ func TestSchedulerAndWorkerFlow_Success(t *testing.T) {
     }
 }
 
-// Verify log retention using a small cap and rapid checks
+// Verify per-endpoint log retention cap via public GetLogs API.
 func TestLogsRetentionLimit(t *testing.T) {
     ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         w.WriteHeader(http.StatusOK)
     }))
     defer ts.Close()
 
-    c := uptime.New(uptime.WithWorkers(1), uptime.WithLogRetention(10))
+    c := up.New(up.WithWorkers(1), up.WithLogRetention(10))
     c.Start()
     defer c.Stop()
 
-    c.AddSite(uptime.Endpoint{
+    c.AddSite(up.Endpoint{
         ID:             "keep",
         Name:           "fast",
         URL:            ts.URL,
         Method:         "GET",
-        Frequency:      2 * time.Millisecond,
+        Frequency:      3 * time.Millisecond,
         ExpectedStatus: 200,
     })
 
-    // wait for several cycles to occur
-    time.Sleep(120 * time.Millisecond)
-
+    time.Sleep(150 * time.Millisecond)
     logs := c.GetLogs("keep", 1000)
     if len(logs) != 10 {
         t.Fatalf("expected retention of 10 logs, got %d", len(logs))
     }
 }
 
-// Load endpoints from JSON and ensure defaults/units
-func TestLoadFromFile(t *testing.T) {
-    eps := []uptime.Endpoint{{ID: "a", Name: "A", URL: "http://example", Method: "GET", Frequency: 1, ExpectedStatus: 0}}
+// Ensure LoadFromFile reads JSON where frequency is in seconds and applies defaults.
+func TestLoadFromFile_SecondsUnit(t *testing.T) {
+    // Use an inline temp file to avoid dependency on working directory
+    eps := []up.Endpoint{{ID: "a", Name: "A", URL: "http://example", Method: "GET", Frequency: 1, ExpectedStatus: 0}}
     b, _ := json.Marshal(eps)
     f, err := os.CreateTemp(t.TempDir(), "eps-*.json")
     if err != nil {
@@ -110,7 +108,7 @@ func TestLoadFromFile(t *testing.T) {
     _, _ = f.Write(b)
     _ = f.Close()
 
-    c := uptime.New()
+    c := up.New()
     if err := c.LoadFromFile(f.Name()); err != nil {
         t.Fatalf("LoadFromFile error: %v", err)
     }
@@ -126,30 +124,36 @@ func TestLoadFromFile(t *testing.T) {
     }
 }
 
-// Use zap observer to assert log emission indirectly via checks
-func TestLogLevelsWithObserver(t *testing.T) {
-    core, obs := observer.New(zap.InfoLevel)
-    logger := zap.New(core)
-
+// Validate logging options: file-only, console off, no panic; file created and non-empty after a check.
+func TestLogging_FileOnlyProducesOutput(t *testing.T) {
     ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         w.WriteHeader(http.StatusOK)
     }))
     defer ts.Close()
 
-    c := uptime.New(uptime.WithLogger(logger), uptime.WithLogLevel(uptime.LogInfo), uptime.WithWorkers(1))
+    dir := t.TempDir()
+    path := filepath.Join(dir, "uptime.log")
+
+    c := up.New(
+        up.WithWorkers(1),
+        up.WithLogLevel(up.LogInfo),
+        up.LogConsole(false),
+        up.LogFile(path),
+    )
     c.Start()
     defer c.Stop()
 
-    c.AddSite(uptime.Endpoint{ID: "svc", Name: "svc", URL: ts.URL, Method: "GET", Frequency: 10 * time.Millisecond, ExpectedStatus: 200})
+    c.AddSite(up.Endpoint{ID: "one", Name: "one", URL: ts.URL, Method: "GET", Frequency: 15 * time.Millisecond, ExpectedStatus: 200})
 
-    // Wait for at least one log entry to be produced
-    deadline := time.Now().Add(2 * time.Second)
-    for time.Now().Before(deadline) {
-        if len(obs.All()) >= 1 {
-            return
-        }
-        time.Sleep(10 * time.Millisecond)
+    // wait for at least one cycle and a small write window
+    time.Sleep(120 * time.Millisecond)
+
+    info, err := os.Stat(path)
+    if err != nil {
+        t.Fatalf("expected log file to exist: %v", err)
     }
-    t.Fatalf("expected at least 1 log entry, got %d", len(obs.All()))
+    if info.Size() == 0 {
+        t.Fatalf("expected log file to be non-empty")
+    }
 }
 

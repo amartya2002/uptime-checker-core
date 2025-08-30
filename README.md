@@ -1,10 +1,6 @@
-# Uptime Checker
+# Uptime Checker (Go)
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/amartya2002/uptime-checker-core/uptime.svg)](https://pkg.go.dev/github.com/amartya2002/uptime-checker-core/uptime)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
-
-A concurrent, configurable HTTP uptime checker for Go.
-Provides a worker pool, scheduling, structured logging, and real-time results streaming.
+Concurrent, configurable HTTP uptime checker with a worker pool, simple scheduling, structured logging, and real‑time results streaming.
 
 
 
@@ -12,7 +8,7 @@ Provides a worker pool, scheduling, structured logging, and real-time results st
 
 * Concurrent worker pool for efficient endpoint checks
 * Per-endpoint scheduling with customizable frequency
-* Structured logging via [zap](https://github.com/uber-go/zap)
+* Structured logging with a simple, logger‑agnostic API
 * In-memory logs with retention cap per endpoint
 * Stream results in real time via channel
 * Functional options for configuration (timeouts, workers, logging, buffers)
@@ -48,6 +44,8 @@ func main() {
         uptime.WithWorkers(20),
         uptime.WithTimeout(5*time.Second),
         uptime.WithLogLevel(uptime.LogInfo),
+        uptime.LogConsole(true),
+        // uptime.LogFile("/var/log/uptime.log"), // optional file sink
     )
     checker.Start()
     defer checker.Stop()
@@ -83,7 +81,7 @@ func main() {
   {"id":"s1","name":"Google","url":"https://google.com","method":"GET","frequency":30,"expected_status":200},
   {"id":"s2","name":"HTTPBin","url":"https://httpbin.org/status/204","method":"GET","frequency":15,"expected_status":204}
 ]
-```
+
 
 Usage:
 
@@ -97,24 +95,44 @@ if err := checker.LoadFromFile("endpoints.json"); err != nil {
 
 
 
+
+
 ## Configuration Options
 
-| Option                           | Description                                                                                                                                                       | Example                                | Default             |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ------------------- |
-| `WithWorkers(n int)`             | Number of worker goroutines for concurrent checks                                                                                                                 | `WithWorkers(50)`                      | `50`                |
-| `WithTimeout(d time.Duration)`   | HTTP client timeout per request                                                                                                                                   | `WithTimeout(5*time.Second)`           | `10s`               |
-| `WithLogLevel(level LogLevel)`   | Log verbosity: <br>• `LogNone` → no logs<br>• `LogError` → only failures<br>• `LogInfo` → successes + failures<br>• `LogDebug` → verbose (status, latency, error) | `WithLogLevel(uptime.LogInfo)`         | `LogInfo`           |
-| `WithResultBuffer(size int)`     | Results channel buffer size                                                                                                                                       | `WithResultBuffer(500)`                | `1000`              |
-| `WithInternalLogs(enabled bool)` | Enable lifecycle logs (scheduler, workers)                                                                                                                        | `WithInternalLogs(true)`               | `false`             |
-| `WithZapLogger(filePath string)` | Output logs:<br>• empty → console only<br>• path → console + file                                                                                                 | `WithZapLogger("/var/log/uptime.log")` | Console only        |
-| `WithLogger(l *zap.Logger)`      | Inject your own zap logger (tests, advanced configs)                                                                                                              | `WithLogger(zap.NewExample())`         | Internal zap logger |
-| `WithLogRetention(n int)`        | Maximum in-memory logs kept per endpoint                                                                                                                          | `WithLogRetention(200)`                | `100`               |
+| Option                                                     | Description                                                                                                                                                                                 | Default           | Example                                                                                             |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- | --------------------------------------------------------------------------------------------------- |
+| `WithWorkers(int)`                                         | Number of worker goroutines used to check endpoints concurrently                                                                                                                            | `50`              | `WithWorkers(20)`                                                                                   |
+| `WithTimeout(time.Duration)`                               | HTTP client timeout per request                                                                                                                                                             | `10s`             | `WithTimeout(5*time.Second)`                                                                        |
+| `WithLogLevel(LogNone \| LogError \| LogInfo \| LogDebug)` | Controls site-check log output: <br>• `LogNone`: no logs <br>• `LogError`: only failures <br>• `LogInfo`: successes + failures (default) <br>• `LogDebug`: verbose (status, latency, error) | `LogInfo`         | `WithLogLevel(uptime.LogInfo)`                                                                      |
+| `LogConsole(bool)`                                         | Enable/disable console (stdout) output                                                                                                                                                      | `true`            | Console only → `LogConsole(true)` <br> File only → `LogConsole(false)` + one or more `LogFile(...)` |
+| `LogFile(string)`                                          | Add a file sink for logs. Repeatable for multiple files.                                                                                                                                    | none              | `LogFile("/var/log/uptime.log")`                                                                    |
+| `DisableLogs()`                                            | Disable **all** logging outputs                                                                                                                                                             | enabled by config | `DisableLogs()`                                                                                     |
+| `WithResultBuffer(int)`                                    | Results channel buffer size                                                                                                                                                                 | `1000`            | `WithResultBuffer(200)`                                                                             |
+| `WithInternalLogs(bool)`                                   | Enable lifecycle logs (scheduler/worker flow)                                                                                                                                               | `false`           | `WithInternalLogs(true)`                                                                            |
+| `WithLogRetention(int)`                                    | Per-endpoint in-memory log retention                                                                                                                                                        | `100`             | `WithLogRetention(500)`                                                                             |
+
+
+Examples:
+
+```go
+// Console only (default if not specified)
+uptime.New(uptime.LogConsole(true))
+
+// File only
+uptime.New(uptime.LogConsole(false), uptime.LogFile("/var/log/uptime.log"))
+
+// Console + file
+uptime.New(uptime.LogConsole(true), uptime.LogFile("/var/log/uptime.log"))
+
+// No logs
+uptime.New(uptime.DisableLogs())
+```
 
 
 
 ## Example: HTTP API Wrapper
 
-See [`examples/gin-server`](./examples/gin-server) for a Gin-based API exposing:
+See `examples/gin-server` for a Gin-based API exposing:
 
 * `POST /sites` → register a new site
 * `GET /sites/:id/logs` → fetch recent uptime logs
@@ -127,12 +145,11 @@ Gin is **not required**; it’s only used for the example.
 ```
 .
 ├── uptime/               # Core reusable package
-│   ├── checker.go        # Checker struct + constructor
-│   ├── endpoint.go       # Endpoint, Result, Job definitions
-│   ├── options.go        # Functional options
-│   ├── scheduler.go      # Worker pool + scheduling logic
-│   ├── logging.go        # Logging + log levels
-│   └── storage.go        # In-memory logs
+│   ├── checker.go        # Public API (New, Start/Stop, AddSite, etc.)
+│   ├── options.go        # Functional options (workers, timeouts, logging)
+│   ├── types.go          # Endpoint, Result, Job, LogLevel
+│   ├── workers.go        # Worker pool, scheduler, logging internals
+│   └── doc.go            # Package docs
 ├── examples/
 │   └── gin-server/       # Example API integration
 │       └── main.go

@@ -8,14 +8,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"core-v6/uptime" // replace with your actual module path
+	"github.com/amartya2002/uptime-checker-core/uptime"
 )
 
 type Site struct {
 	URL            string `json:"url" binding:"required"`
 	Name           string `json:"name" binding:"required"`
 	ExpectedStatus int    `json:"expected_status,omitempty"`
-	CheckInterval  int    `json:"check_interval,omitempty"` // in seconds
+	CheckInterval  int    `json:"check_interval,omitempty"`
 }
 type LogResponse struct {
 	Timestamp  time.Time `json:"timestamp"`
@@ -31,12 +31,16 @@ type SiteLogResponse struct {
 
 func main() {
 	// Initialize uptime checker
-	checker := uptime.New(
-		uptime.WithWorkers(5),
-		uptime.WithTimeout(10*time.Second),
-		uptime.WithLogLevel(uptime.LogError), // site check logs
-		uptime.WithInternalLogs(false),
-	)
+    checker := uptime.New(
+        uptime.WithWorkers(5),
+        uptime.WithTimeout(10*time.Second),
+        uptime.WithLogLevel(uptime.LogInfo), // site check logs
+        uptime.WithInternalLogs(true),
+        // Logging outputs: use explicit options for clarity
+        uptime.LogConsole(true),            // console on/off
+        // uptime.LogFile("/tmp/uptime.log"), // add file sink (repeatable)
+        // uptime.DisableLogs(),              // disable logging entirely
+    )
 	checker.Start()
 	defer checker.Stop()
 

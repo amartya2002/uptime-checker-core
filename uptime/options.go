@@ -33,7 +33,8 @@ func WithInternalLogs(enabled bool) Option {
     return func(c *Checker) { c.enableInternalLogs = enabled }
 }
 
-// WithZapLogger sets up a zap logger. If filePath is empty, logs to console.
+// Deprecated: prefer LogConsole/LogFile/DisableLogs.
+// WithZapLogger sets up a logger. If filePath is empty, logs to console.
 func WithZapLogger(filePath string) Option {
     return func(c *Checker) {
         var err error
@@ -47,15 +48,67 @@ func WithZapLogger(filePath string) Option {
         if err != nil {
             panic(fmt.Sprintf("Failed to initialize Zap logger: %v", err))
         }
+        c.loggerExplicit = true
     }
 }
 
 // WithLogger allows injecting a custom zap logger (useful in tests).
 func WithLogger(l *zap.Logger) Option {
-    return func(c *Checker) { c.logger = l }
+    return func(c *Checker) { c.logger = l; c.loggerExplicit = true }
 }
 
 // WithLogRetention sets the max number of in-memory logs kept per endpoint.
 func WithLogRetention(n int) Option {
     return func(c *Checker) { if n > 0 { c.logRetention = n } }
+}
+
+// Log configures outputs in a single call.
+// Values: "console" (stdout), "none" (disable), or one/more file paths.
+func Log(outputs ...string) Option {
+    return func(c *Checker) {
+        // Reset config
+        c.logConsoleOpt = nil
+        c.logFilesOpt = nil
+        c.logDisableOpt = false
+        if len(outputs) == 0 {
+            // default console
+            b := true
+            c.logConsoleOpt = &b
+            return
+        }
+        for _, o := range outputs {
+            switch o {
+            case "none":
+                c.logDisableOpt = true
+            case "console":
+                b := true
+                c.logConsoleOpt = &b
+            default:
+                c.logFilesOpt = append(c.logFilesOpt, o)
+            }
+        }
+    }
+}
+
+// LogConsole enables/disables console logging (stdout).
+func LogConsole(enabled bool) Option {
+    return func(c *Checker) {
+        c.logConsoleOpt = &enabled
+    }
+}
+
+// LogFile adds a file path to log outputs. Can be used multiple times.
+func LogFile(path string) Option {
+    return func(c *Checker) {
+        if path != "" {
+            c.logFilesOpt = append(c.logFilesOpt, path)
+        }
+    }
+}
+
+// DisableLogs disables logging entirely.
+func DisableLogs() Option {
+    return func(c *Checker) {
+        c.logDisableOpt = true
+    }
 }
