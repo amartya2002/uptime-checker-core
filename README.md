@@ -1,13 +1,12 @@
 # Uptime Checker
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/amartya2002/uptime-checker-core/uptime.svg)](https://pkg.go.dev/github.com/amartya2002/uptime-checker-core/uptime)
-[![Go Report Card](https://goreportcard.com/badge/github.com/amartya2002/uptime-checker-core)](https://goreportcard.com/report/github.com/amartya2002/uptime-checker-core)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
 
 A concurrent, configurable HTTP uptime checker for Go.
 Provides a worker pool, scheduling, structured logging, and real-time results streaming.
 
----
+
 
 ## Features
 
@@ -19,7 +18,6 @@ Provides a worker pool, scheduling, structured logging, and real-time results st
 * Functional options for configuration (timeouts, workers, logging, buffers)
 * Load endpoints from JSON for easy bulk setup
 
----
 
 ## Installation
 
@@ -33,7 +31,6 @@ In your code:
 import "github.com/amartya2002/uptime-checker-core/uptime"
 ```
 
----
 
 ## Quick Start
 
@@ -76,7 +73,6 @@ func main() {
 }
 ```
 
----
 
 ## Loading Endpoints from JSON
 
@@ -99,9 +95,9 @@ if err := checker.LoadFromFile("endpoints.json"); err != nil {
 
 > Note: `frequency` is expressed in **seconds** in the JSON file.
 
----
 
-## ⚙Configuration Options
+
+## Configuration Options
 
 | Option                           | Description                                                                                                                                                       | Example                                | Default             |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ------------------- |
@@ -114,7 +110,7 @@ if err := checker.LoadFromFile("endpoints.json"); err != nil {
 | `WithLogger(l *zap.Logger)`      | Inject your own zap logger (tests, advanced configs)                                                                                                              | `WithLogger(zap.NewExample())`         | Internal zap logger |
 | `WithLogRetention(n int)`        | Maximum in-memory logs kept per endpoint                                                                                                                          | `WithLogRetention(200)`                | `100`               |
 
----
+
 
 ## Example: HTTP API Wrapper
 
@@ -125,7 +121,6 @@ See [`examples/gin-server`](./examples/gin-server) for a Gin-based API exposing:
 
 Gin is **not required**; it’s only used for the example.
 
----
 
 ## Project Structure
 
@@ -144,9 +139,7 @@ Gin is **not required**; it’s only used for the example.
 └── go.mod
 ```
 
----
-
-## 🛠 Development
+## Development
 
 ### Clone & Setup
 
@@ -180,8 +173,6 @@ go run main.go
 ```
 
 Then visit: [http://localhost:8080](http://localhost:8080)
-
----
 
 ## 🤝 Contributing
 
