@@ -1,4 +1,4 @@
-module github.com/amartya2002/uptime-checker-core/uptime
+module github.com/amartya2002/uptime-checker-core
 
 go 1.23.4
 
