@@ -2,10 +2,6 @@
 
 Concurrent, configurable HTTP uptime checker with a worker pool, simple scheduling, structured logging, and real‑time results streaming.
 
-</div>
-
----
-
 ## Features
 
 - Concurrent worker pool for high throughput checks
